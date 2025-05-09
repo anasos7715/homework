@@ -1,217 +1,281 @@
+
 <?php
+// Database connection
 $conn = mysqli_connect("localhost", "root", "", "test");
-
-$submitted = false;
-$errors = [];
-$last_id = null;
-$file_data = null;
-
-// Clean input data for database insertion
-function clean($data) {
-    return quotemeta(trim($data));
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
 }
+mysqli_set_charset($conn, "utf8mb4");
 
-// Validate phone number
-function validate_phone($phone) {
-    return preg_match("/^(?:\+962[0-9]{9}|0[0-9]{9})$/", $phone);
-}
+// Variables for storing messages
+$message = "";
+$last_id = "";
+$file_content = "";
+$first_ten_chars = "";
 
-// Get last serial number from database
-function get_last_serial($conn) {
-    $result = mysqli_query($conn, "SELECT MAX(id) as last_id FROM users");
-    $row = mysqli_fetch_assoc($result);
-    return $row['last_id'] ? $row['last_id'] : 0;
-}
-
-// Read data from CSV file
-$file_path = "data.csv";
-if (file_exists($file_path)) {
-    $file_handle = fopen($file_path, "r");
-    // Skip header row
-    $header = fgetcsv($file_handle);
-    if ($row = fgetcsv($file_handle)) {
-        $file_data = [
-            'fname' => clean($row[0]),
-            'lname' => clean($row[1]),
-            'email' => clean($row[2]),
-            'phone' => clean($row[3]),
-            'language' => clean($row[4])
-        ];
-    }
-    fclose($file_handle);
-} else {
-    $errors[] = "Data file (data.csv) not found.";
-}
-
-// Handle form submission
+// Process form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['form_submit'])) {
-    $fname = trim($_POST['fname']);
-    $lname = trim($_POST['lname']);
-    $email = trim($_POST['email']);
-    $phone = trim($_POST['phone']);
-    $language = trim($_POST['language']);
+    $fname = $_POST['fname'];
+    $lname = $_POST['lname'];
+    $email = $_POST['email'];
+    $phone = $_POST['phone'];
 
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Invalid email format.";
-    }
+    if (empty($fname) || empty($lname) || empty($email) || empty($phone)) {
+        $message = "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                        <i class='bi bi-exclamation-triangle-fill me-2'></i> All fields are required!
+                    </div>";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $message = "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                        <i class='bi bi-exclamation-triangle-fill me-2'></i> Invalid email address!
+                    </div>";
+    } elseif (!preg_match("/^[0-9]{10}$/", $phone)) {
+        $message = "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                        <i class='bi bi-exclamation-triangle-fill me-2'></i> Phone number must be 10 digits!
+                    </div>";
+    } else {
+        $fname = mysqli_real_escape_string($conn, $fname);
+        $lname = mysqli_real_escape_string($conn, $lname);
+        $email = mysqli_real_escape_string($conn, $email);
+        $phone = mysqli_real_escape_string($conn, $phone);
 
-    if (!validate_phone($phone)) {
-        $errors[] = "Invalid phone number. It must start with +962 or 0 and followed by 9 digits. Provided: '$phone'.";
-    }
-
-    if (empty($errors)) {
-        // Clean data for database
-        $fname_db = clean($fname);
-        $lname_db = clean($lname);
-        $email_db = clean($email);
-        $phone_db = clean($phone);
-        $language_db = clean($language);
-
-        $query = "INSERT INTO users (fname, lname, email, phone, language)
-                  VALUES ('$fname_db', '$lname_db', '$email_db', '$phone_db', '$language_db')";
+        $query = "INSERT INTO users (fname, lname, email, phone) VALUES ('$fname', '$lname', '$email', '$phone')";
         if (mysqli_query($conn, $query)) {
-            $last_id = mysqli_insert_id($conn);
-            $submitted = true;
+            $message = "<div class='alert alert-success d-flex align-items-center' role='alert'>
+                            <i class='bi bi-check-circle-fill me-2'></i> Data added successfully!
+                        </div>";
         } else {
-            $errors[] = "Database error: " . mysqli_error($conn);
+            $message = "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                            <i class='bi bi-exclamation-triangle-fill me-2'></i> Error: " . mysqli_error($conn) . "
+                        </div>";
         }
     }
 }
 
-// Handle direct data insertion
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['direct_submit'])) {
-    $fname = "John";
-    $lname = "Doe";
-    $email = "john.doe@example.com";
-    $phone = "0791234567"; // Changed to simpler format
-    $language = "Python";
-
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Invalid email format in direct data.";
-    }
-
-    if (!validate_phone($phone)) {
-        $errors[] = "Invalid phone number in direct data. Provided: '$phone'.";
-    }
-
-    if (empty($errors)) {
-        // Clean data for database
-        $fname_db = clean($fname);
-        $lname_db = clean($lname);
-        $email_db = clean($email);
-        $phone_db = clean($phone);
-        $language_db = clean($language);
-
-        $query = "INSERT INTO users (fname, lname, email, phone, language)
-                  VALUES ('$fname_db', '$lname_db', '$email_db', '$phone_db', '$language_db')";
-        if (mysqli_query($conn, $query)) {
-            $last_id = mysqli_insert_id($conn);
-            $submitted = true;
-        } else {
-            $errors[] = "Database error: " . mysqli_error($conn);
+// Insert static data
+$static_fname = "Mohammed";
+$static_lname = "Ahmed";
+$static_email = "mohammed@example.com";
+$static_phone = "1234567890";
+if (!empty($static_fname) && filter_var($static_email, FILTER_VALIDATE_EMAIL)) {
+    $query = "SELECT COUNT(*) AS count FROM users WHERE email = '$static_email'";
+    $result = mysqli_query($conn, $query);
+    $row = mysqli_fetch_assoc($result);
+    if ($row['count'] == 0) {
+        $static_fname = mysqli_real_escape_string($conn, $static_fname);
+        $static_lname = mysqli_real_escape_string($conn, $static_lname);
+        $static_email = mysqli_real_escape_string($conn, $static_email);
+        $static_phone = mysqli_real_escape_string($conn, $static_phone);
+        $query = "INSERT INTO users (fname, lname, email, phone) VALUES ('$static_fname', '$static_lname', '$static_email', '$static_phone')";
+        if (!mysqli_query($conn, $query)) {
+            die("Error inserting static data: " . mysqli_error($conn));
         }
     }
 }
 
-$last_serial = get_last_serial($conn);
+// Fetch the last ID
+$query = "SELECT MAX(id) AS last_id FROM users";
+$result = mysqli_query($conn, $query);
+$row = mysqli_fetch_assoc($result);
+$last_id = $row['last_id'] ? $row['last_id'] : "No data available";
+
+// Read or create data.txt
+$existing_file = "data.txt";
+if (!file_exists($existing_file)) {
+    // Create the file with default content
+    $default_content = "Default data for data.txt";
+    $file_handle = fopen($existing_file, "w"); // Open in write mode (creates file)
+    if ($file_handle === false) {
+        $file_message = "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                            <i class='bi bi-exclamation-triangle-fill me-2'></i> Failed to create $existing_file!
+                        </div>";
+    } else {
+        fwrite($file_handle, $default_content);
+        fclose($file_handle);
+        $file_message = "<div class='alert alert-info d-flex align-items-center' role='alert'>
+                            <i class='bi bi-info-circle-fill me-2'></i> File $existing_file created with default content: " . htmlspecialchars($default_content) . "
+                        </div>";
+    }
+} else {
+    $file_content = file_get_contents($existing_file);
+    $file_message = "<div class='alert alert-info d-flex align-items-center' role='alert'>
+                        <i class='bi bi-info-circle-fill me-2'></i> File content: " . htmlspecialchars($file_content) . "
+                    </div>";
+}
+
+// Create and write to newfile.txt
+$new_file = "newfile.txt";
+$new_data = "Hello, this is a new file";
+$file_handle = fopen($new_file, "w"); // Open in write mode (creates or overwrites)
+if ($file_handle === false) {
+    $new_file_message = "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                            <i class='bi bi-exclamation-triangle-fill me-2'></i> Failed to create $new_file!
+                        </div>";
+} else {
+    fwrite($file_handle, $new_data);
+    fclose($file_handle);
+    $new_file_content = file_get_contents($new_file);
+    $new_file_message = "<div class='alert alert-info d-flex align-items-center' role='alert'>
+                            <i class='bi bi-info-circle-fill me-2'></i> New file content: " . htmlspecialchars($new_file_content) . "
+                        </div>";
+}
+
+// Append data to output.txt and print characters
+$output_file = "output.txt";
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['file_text'])) {
+    $text = $_POST['file_text'];
+    $file_handle = fopen($output_file, "a"); // Open in append mode
+    if ($file_handle === false) {
+        $file_message .= "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                            <i class='bi bi-exclamation-triangle-fill me-2'></i> Failed to append to $output_file!
+                        </div>";
+    } else {
+        fwrite($file_handle, $text . "\n");
+        fclose($file_handle);
+        $file_message .= "<div class='alert alert-success d-flex align-items-center' role='alert'>
+                            <i class='bi bi-check-circle-fill me-2'></i> Text appended to file successfully!
+                        </div>";
+    }
+}
+
+// Append static data to output.txt
+$static_file_data = "Static data";
+$file_handle = fopen($output_file, "a"); // Open in append mode
+if ($file_handle !== false) {
+    fwrite($file_handle, $static_file_data . "\n");
+    fclose($file_handle);
+}
+
+// Read output.txt and extract first 10 characters
+if (file_exists($output_file)) {
+    $output_content = file_get_contents($output_file);
+    $first_ten_chars = substr($output_content, 0, 10);
+    $file_message .= "<div class='alert alert-info d-flex align-items-center' role='alert'>
+                        <i class='bi bi-info-circle-fill me-2'></i> First 10 characters of file: " . htmlspecialchars($first_ten_chars) . "
+                    </div>";
+} else {
+    $file_message .= "<div class='alert alert-danger d-flex align-items-center' role='alert'>
+                        <i class='bi bi-exclamation-triangle-fill me-2'></i> File $output_file does not exist!
+                    </div>";
+}
+
+// Close connection
+mysqli_close($conn);
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Dynamic Registration Form</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Entry System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            transition: transform 0.2s;
+        }
+        .btn-primary:hover {
+            transform: scale(1.05);
+        }
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-control:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+    </style>
 </head>
-<body class="bg-light">
-  <div class="container mt-5">
-    <div class="row justify-content-center">
-      <div class="col-md-8 col-lg-6">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <h2 class="text-center mb-4">Registration Form</h2>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Data Entry System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="#">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">About</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
 
-            <div class="alert alert-info">
-              <strong>Last Serial Number in Database:</strong> <?= $last_serial ?>
+    <!-- Main Content -->
+    <div class="container my-5">
+        <div class="row">
+            <!-- Data Entry Form -->
+            <div class="col-lg-6 mb-4">
+                <div class="card p-4">
+                    <h2 class="card-title mb-4">Enter Data</h2>
+                    <form action="" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">First Name</label>
+                            <input type="text" name="fname" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Last Name</label>
+                            <input type="text" name="lname" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" name="email" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phone</label>
+                            <input type="text" name="phone" class="form-control" required>
+                        </div>
+                        <button type="submit" name="form_submit" class="btn btn-primary w-100">
+                            <i class="bi bi-send-fill me-2"></i>Submit
+                        </button>
+                    </form>
+                </div>
             </div>
 
-            <?php if ($submitted): ?>
-              <div class="alert alert-success">
-                <strong>Form submitted successfully!</strong><br>
-                <ul class="mb-0">
-                  <li><strong>Serial Number:</strong> <?= $last_id ?></li>
-                  <li><strong>Name:</strong> <?= htmlspecialchars($fname) ?> <?= htmlspecialchars($lname) ?></li>
-                  <li><strong>Email:</strong> <?= htmlspecialchars($email) ?></li>
-                  <li><strong>Phone:</strong> <?= htmlspecialchars($phone) ?></li>
-                  <li><strong>Favorite Language:</strong> <?= htmlspecialchars($language) ?></li>
-                </ul>
-              </div>
-            <?php endif; ?>
-
-            <?php if (!empty($errors)): ?>
-              <div class="alert alert-danger">
-                <ul class="mb-0">
-                  <?php foreach ($errors as $err): ?>
-                    <li><?= htmlspecialchars($err) ?></li>
-                  <?php endforeach; ?>
-                </ul>
-              </div>
-            <?php endif; ?>
-
-            <?php if ($file_data): ?>
-              <div class="alert alert-warning">
-                <strong>Data from file:</strong> 
-                <?= htmlspecialchars($file_data['fname']) ?> <?= htmlspecialchars($file_data['lname']) ?> 
-                with email <?= htmlspecialchars($file_data['email']) ?> 
-                prefers <?= htmlspecialchars($file_data['language']) ?>.
-              </div>
-            <?php endif; ?>
-
-            <form method="post" action="">
-              <input type="hidden" name="form_submit" value="1">
-              <div class="mb-3">
-                <label for="fname" class="form-label">First Name</label>
-                <input type="text" class="form-control" name="fname" id="fname" required>
-              </div>
-
-              <div class="mb-3">
-                <label for="lname" class="form-label">Last Name</label>
-                <input type="text" class="form-control" name="lname" id="lname" required>
-              </div>
-
-              <div class="mb-3">
-                <label for="email" class="form-label">Email Address</label>
-                <input type="email" class="form-control" name="email" id="email" required>
-              </div>
-
-              <div class="mb-3">
-                <label for="phone" class="form-label">Phone Number</label>
-                <input type="text" class="form-control" name="phone" id="phone" required>
-                <div class="form-text">Format: +962xxxxxxxxx or 0xxxxxxxxx</div>
-              </div>
-
-              <div class="mb-3">
-                <label for="language" class="form-label">Favorite Language</label>
-                <select class="form-select" name="language" id="language">
-                  <option value="PHP">PHP</option>
-                  <option value="JavaScript">JavaScript</option>
-                  <option value="Python">Python</option>
-                  <option value="Java">Java</option>
-                </select>
-              </div>
-
-              <button type="submit" class="btn btn-success w-100 mb-3">Submit Form</button>
-            </form>
-
-            <form method="post" action="">
-              <input type="hidden" name="direct_submit" value="1">
-              <button type="submit" class="btn btn-primary w-100">Insert Direct Data</button>
-            </form>
-          </div>
+            <!-- File Input Form -->
+            <div class="col-lg-6 mb-4">
+                <div class="card p-4">
+                    <h2 class="card-title mb-4">Append Text to File</h2>
+                    <form action="" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Enter Text</label>
+                            <input type="text" name="file_text" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class='bi bi-file-earmark-text-fill me-2'></i>Append to File
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
-      </div>
+
+        <!-- Display Messages -->
+        <?php if (!empty($message)) echo $message; ?>
+        <?php if (!empty($file_message)) echo $file_message; ?>
+        <?php if (!empty($new_file_message)) echo $new_file_message; ?>
+
+        <!-- Display Last ID -->
+        <div class="card p-4 mt-4">
+            <h3 class="card-title">Last Record ID: <?php echo htmlspecialchars($last_id); ?></h3>
+        </div>
     </div>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
